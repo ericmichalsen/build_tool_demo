@@ -35,22 +35,49 @@ if (file_exists($local_settings)) {
 
 // Configure Redis
 
-if (defined('PANTHEON_ENVIRONMENT')) {
-  // Include the Redis services.yml file. Adjust the path if you installed to a contrib or other subdirectory.
-  $settings['container_yamls'][] = 'web/modules/contrib/redis/example.services.yml';
 
-  //phpredis is built into the Pantheon application container.
-  $settings['redis.connection']['interface'] = 'PhpRedis';
-  // These are dynamic variables handled by Pantheon.
-  $settings['redis.connection']['host']      = $_ENV['CACHE_HOST'];
-  $settings['redis.connection']['port']      = $_ENV['CACHE_PORT'];
-  $settings['redis.connection']['password']  = $_ENV['CACHE_PASSWORD'];
+$variables = array (
+  'domains' =>
+  array (
+    'canonical' => '',
+    'synonyms' =>
+    array (
+      0 => 'dev-build-tool-demo.pantheonsite.io'
+    ),
+  ),
+  'redis' => true,
+);
 
-  $settings['redis_compress_length'] = 100;
-  $settings['redis_compress_level'] = 1;
+  if (array_key_exists('redis', $variables) && $variables['redis']) {
+    // Set possible redis module paths.
+    $redis_paths = array(
+      implode(DIRECTORY_SEPARATOR, array('sites', 'default', 'modules', 'contrib', 'redis')),
+      implode(DIRECTORY_SEPARATOR, array('sites', 'default', 'modules', 'redis')),
+      implode(DIRECTORY_SEPARATOR, array('modules', 'contrib', 'redis')),
+      implode(DIRECTORY_SEPARATOR, array('modules', 'redis')),
+    );
 
-  $settings['cache']['default'] = 'cache.backend.redis'; // Use Redis as the default cache.
-  $settings['cache_prefix']['default'] = 'pantheon-redis';
+    if (array_key_exists('CACHE_HOST', $_ENV) && !empty($_ENV['CACHE_HOST'])) {
+      foreach ($redis_paths as $path) {
+        if (is_dir($path)) {
+          if (in_array('example.services.yml', scandir($path))) {
+            $settings['container_yamls'][] = $path . DIRECTORY_SEPARATOR . 'example.services.yml';
 
-  $settings['cache']['bins']['form'] = 'cache.backend.database'; // Use the database for forms
-}
+            $settings['redis.connection']['interface'] = 'PhpRedis';
+            $settings['redis.connection']['host'] = $_ENV['CACHE_HOST'];
+            $settings['redis.connection']['port'] = $_ENV['CACHE_PORT'];
+            $settings['redis.connection']['password'] = $_ENV['CACHE_PASSWORD'];
+
+            $settings['cache']['default'] = 'cache.backend.redis';
+            $settings['cache_prefix']['default'] = 'pantheon-redis';
+
+            $settings['cache']['bins']['bootstrap'] = 'cache.backend.chainedfast';
+            $settings['cache']['bins']['discovery'] = 'cache.backend.chainedfast';
+            $settings['cache']['bins']['config'] = 'cache.backend.chainedfast';
+
+            break;
+          }
+        }
+      }
+    }
+  }
